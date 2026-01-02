@@ -115,6 +115,50 @@ settings:
   log_level: info
 ```
 
+### Ubicaciones del Archivo de Configuración
+
+El archivo `config.yaml` se busca en el siguiente orden:
+
+1. **Directorio actual** - `./config.yaml` (para desarrollo)
+2. **XDG_CONFIG_HOME** - `$XDG_CONFIG_HOME/cclaude/config.yaml`
+3. **Home directory** - `~/.config/cclaude/config.yaml`
+4. **System-wide** - `/etc/cclaude/config.yaml`
+
+### Hot-Reload de Configuración
+
+La configuración se recarga automáticamente cuando detecta cambios en el archivo:
+
+```bash
+# Iniciar el modo de observación (automático al cargar config)
+cclaude --watch
+
+# Simplemente edita el archivo config.yaml
+vim ~/.config/cclaude/config.yaml
+
+# Los cambios se aplican automáticamente sin reiniciar
+```
+
+**Nota**: El hot-reload usa `fsnotify` para detectar cambios en tiempo real.
+
+### Comandos de Configuración
+
+```bash
+# Inicializar configuración por defecto
+cclaude init
+
+# Crear config con --force (sobrescribe existente)
+cclaude init --force
+
+# Mostrar dónde está el archivo de configuración
+cclaude config-path
+# Output: Config file: /home/user/.config/cclaude/config.yaml
+
+# Validar configuración
+cclaude validate
+# Muestra estado de cada provider y validación de API keys
+```
+
+
 ## 📖 Uso
 
 ### Comandos Básicos
@@ -131,6 +175,15 @@ cclaude ls
 # Mostrar versión
 cclaude version
 cclaude v
+
+# Inicializar configuración por defecto
+cclaude init
+
+# Mostrar ubicación del archivo de configuración
+cclaude config-path
+
+# Validar configuración y estado de providers
+cclaude validate
 ```
 
 ### Usar con un Proveedor
@@ -174,12 +227,17 @@ cclaude-glm/
 │   │   ├── root.go               # Comando raíz
 │   │   ├── provider.go           # Comando provider
 │   │   ├── list.go              # Comando list
-│   │   └── version.go            # Comando version
+│   │   ├── version.go            # Comando version
+│   │   ├── init.go               # Comando init (FASE-2)
+│   │   ├── config_path.go        # Comando config-path (FASE-2)
+│   │   └── validate.go           # Comando validate (FASE-2)
 │   ├── config/
-│   │   └── loader.go             # Carga configuración
+│   │   ├── loader.go             # Carga configuración con hot-reload (FASE-2)
+│   │   └── loader_test.go        # Tests de configuración (FASE-2)
 │   └── execution/
 │       └── executor.go            # Ejecuta claude CLI
 ├── go.mod                          # Go modules
+├── go.sum                          # Go module checksums
 └── README.md
 ```
 
@@ -226,7 +284,13 @@ Este proyecto sigue un plan de 6 fases:
   - Tests unitarios, integración y E2E
   - Pre-commit hooks (fmt, lint, test, commit-msg)
   - Validación de configuración
-- 🔄 **FASE 2**: Sistema de Configuración - **En progreso**
+- ✅ **FASE 2**: Sistema de Configuración - **Completado**
+  - File watching con fsnotify para hot-reload
+  - Config reloading sin reiniciar aplicación
+  - Múltiples rutas de configuración (XDG, ~/.config, actual, /etc)
+  - Comandos CLI: init, config-path, validate
+  - Thread-safe config access con mutexes
+  - Observer pattern para notificaciones de cambios
 - ⏳ **FASE 3**: Sistema de Providers Avanzado
 - ⏳ **FASE 4**: Testing Extensivo
 - ⏳ **FASE 5**: Multi-Platform Builds
@@ -294,4 +358,6 @@ La sintaxis es casi idéntica, pero con un binario compilado en lugar de un scri
 - [Claude Code Documentation](https://docs.anthropic.com/)
 - [Cobra Documentation](https://github.com/spf13/cobra)
 - [Viper Documentation](https://github.com/spf13/viper)
+- [fsnotify Documentation](https://github.com/fsnotify/fsnotify)
 - [Go Modules](https://go.dev/doc/modules/create)
+- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
