@@ -1,0 +1,11 @@
+# Dependencias para cclaude.py
+# Solo dependencias estándar de Python, no se requieren packages externos
+# Python 3.8+ necesario
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Opcional: para desarrollo
+black>=23.0.0  # Formateo de código
+ruff>=0.1.0    # Linting rápido
