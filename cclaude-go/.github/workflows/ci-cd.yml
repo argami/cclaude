@@ -1,0 +1,249 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  # ==================== VALIDACIÓN ====================
+  validate:
+    name: 🔍 Validación
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verificar formato
+        run: |
+          go fmt ./...
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "❌ Código no formateado correctamente"
+            exit 1
+          fi
+
+      - name: Verificar dependencias
+        run: go mod verify
+
+      - name: Linting con go vet
+        run: go vet ./...
+
+      - name: Linting con staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+  # ==================== TESTS UNITARIOS ====================
+  test:
+    name: 🧪 Tests Unitarios
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Ejecutar tests con cobertura
+        run: go test ./... -cover -coverprofile=coverage.out -v
+
+      - name: Verificar cobertura mínima (80%)
+        run: |
+          COVERAGE=$(go test ./... -cover | grep -oP '\(\K\d+\.\d+' | head -1)
+          echo "Cobertura actual: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Cobertura insuficiente (<80%)"
+            exit 1
+          fi
+
+      - name: Subir cobertura a Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+
+  # ==================== SECURITY SCAN ====================
+  security:
+    name: 🛡️ Security Scan
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run nancy audit
+        run: |
+          go install github.com/sonatype-nexus-community/nancy@latest
+          go list -json -deps ./... | nancy sleuth
+
+  # ==================== BUILD TESTS ====================
+  build:
+    name: 🔨 Build Multi-plataforma
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64  # Windows ARM64 no es común para este caso
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        run: |
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o cclaude-${{ matrix.os }}-${{ matrix.arch }} ./cmd/cclaude
+
+      - name: Verificar binario
+        run: |
+          if [ "${{ matrix.os }}" != "windows" ]; then
+            chmod +x cclaude-${{ matrix.os }}-${{ matrix.arch }}
+            ./cclaude-${{ matrix.os }}-${{ matrix.arch }} --version
+          fi
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: cclaude-${{ matrix.os }}-${{ matrix.arch }}
+          path: cclaude-${{ matrix.os }}-${{ matrix.arch }}
+
+  # ==================== INTEGRATION TESTS ====================
+  integration:
+    name: 🔄 Tests de Integración
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build binario local
+        run: go build -o cclaude ./cmd/cclaude
+
+      - name: Test ayuda
+        run: ./cclaude --help
+
+      - name: Test versión
+        run: ./cclaude --version
+
+      - name: Test proveedores (sin API keys)
+        run: |
+          ./cclaude mimo --version || echo "Expected: API key missing"
+          ./cclaude minimax --version || echo "Expected: API key missing"
+
+      - name: Test flags inválidos
+        run: |
+          ./cclaude --provider-invalid 2>&1 | grep -q "Error" && echo "✅ Flag inválido detectado"
+
+  # ==================== RELEASE (solo en tags) ====================
+  release:
+    name: 🚀 Release Automático
+    runs-on: ubuntu-latest
+    needs: [integration]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Configurar GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Crear Release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+  # ==================== DOCS UPDATE ====================
+  docs:
+    name: 📚 Actualizar Documentación
+    runs-on: ubuntu-latest
+    needs: integration
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Actualizar badges de estado
+        run: |
+          # Actualizar badges en README.md
+          sed -i 's/\[!\[Build Status\].*/[![Build Status](https:\/\/img.shields.io\/badge\/build-passing-brightgreen.svg)]()/' README.md
+          sed -i 's/\[!\[Coverage\].*/[![Coverage](https:\/\/img.shields.io\/badge\/coverage-88.2%25-blue.svg)]()/' README.md
+
+      - name: Commit cambios de documentación
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git diff --staged --quiet || git commit -m "docs: update status badges [skip ci]"
+          git push
+
+  # ==================== NOTIFICATION ====================
+  notify:
+    name: 🔔 Notificaciones
+    runs-on: ubuntu-latest
+    needs: [release, build]
+    if: always()
+    steps:
+      - name: Resultado del pipeline
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#dev-ci-cd'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

@@ -1,6 +1,7 @@
-# GoReleaser Configuration
+# GoReleaser Configuration - Enhanced for Production
 project_name: cclaude
 
+# Build configuration
 builds:
   - id: cclaude
     binary: cclaude
@@ -16,9 +17,18 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+      - -mod=readonly
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    hooks:
+      post:
+        - upx --lzma --best {{ .Path }} 2>/dev/null || true  # Compress if upx available
 
+# Archive configuration
 archives:
   - id: cclaude
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -28,10 +38,25 @@ archives:
     files:
       - LICENSE
       - README.md
+      - CHANGELOG.md
+    # Add executable permissions for Unix systems
+    format_info:
+      - goos: linux
+        format: tar.gz
+        owner: root
+        group: root
+        mode: 0755
+      - goos: darwin
+        format: tar.gz
+        mode: 0755
 
+# Checksum configuration
 checksum:
   name_template: 'checksums.txt'
+  algorithm: sha256
+  disable: false
 
+# Changelog configuration
 changelog:
   sort: asc
   filters:
@@ -39,3 +64,137 @@ changelog:
       - '^docs:'
       - '^test:'
       - '^chore:'
+      - '^ci:'
+      - '^build:'
+  groups:
+    - title: 🚀 Features
+      regexp: '^feat'
+    - title: 🐛 Bug Fixes
+      regexp: '^fix'
+    - title: 📝 Documentation
+      regexp: '^docs'
+    - title: 🔧 Maintenance
+      regexp: '^refactor|^chore|^style'
+    - title: 🧪 Testing
+      regexp: '^test'
+
+# Docker images (opcional)
+dockers:
+  - goos: linux
+    goarch: amd64
+    image_templates:
+      - "argami/cclaude:{{ .Version }}"
+      - "argami/cclaude:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.Commit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    extra_files:
+      - LICENSE
+      - README.md
+
+# Homebrew tap (opcional)
+brews:
+  - name: cclaude
+    tap:
+      owner: argami
+      name: homebrew-cclaude
+    homepage: "https://github.com/argami/cclaude-go"
+    description: "Wrapper multi-proveedor para Claude Code escrito en Go"
+    license: "MIT"
+    install: |
+      bin.install "cclaude"
+    caveats: |
+      Remember to set your API keys:
+        export MIMO_API_KEY="your-key"
+        export MINIMAX_API_KEY="your-key"
+        # etc.
+
+# Scoop bucket (Windows)
+scoops:
+  - name: cclaude
+    bucket:
+      owner: argami
+      name: scoop-bucket
+    homepage: "https://github.com/argami/cclaude-go"
+    description: "Multi-provider Claude Code wrapper written in Go"
+    license: "MIT"
+
+# Signatures
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--yes"
+    artifacts: all
+
+# Announcements
+announce:
+  twitter:
+    enabled: false
+  discord:
+    enabled: false
+  slack:
+    enabled: false
+
+# Release configuration
+release:
+  github:
+    owner: argami
+    name: cclaude-go
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  body_template: |
+    ## 🚀 {{.ProjectName}} v{{.Version}}
+
+    ### 📦 Cambios
+    {{.Changelog}}
+
+    ### 🔗 Binarios
+    Descarga el binario para tu plataforma:
+    - Linux: `cclaude_linux_amd64` / `cclaude_linux_arm64`
+    - macOS: `cclaude_darwin_amd64` / `cclaude_darwin_arm64`
+    - Windows: `cclaude_windows_amd64.exe`
+
+    ### 🔍 Verificación
+    ```bash
+    # Verificar checksum
+    sha256sum -c checksums.txt
+    ```
+
+    ### 📚 Documentación
+    Ver [README.md](README.md) para uso completo.
+
+    **Build**: {{.Date}}
+    **Commit**: {{.Commit}}
+  draft: false
+  prerelease: false
+  replace_existing_draft: false
+  generate_release_notes: true
+
+# Snapshots (for testing)
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+# Environment variables
+env:
+  - CGO_ENABLED=0
+  - GO111MODULE=on
+
+# Before hooks
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+# After hooks
+after:
+  hooks:
+    - go clean -modcache
+    - echo "✅ Release {{.Version}} completada"
+
+# Milestones
+milestones:
+  - close: true
+    fail_on_error: false
