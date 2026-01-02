@@ -1,0 +1,39 @@
+# cclaude Configuration File
+#
+# Location: ~/.config/cclaude/cclaude.yaml or ./config/cclaude.yaml
+#
+# This file contains the default configuration for cclaude.
+# Environment variables and CLI flags take precedence over this file.
+
+# Default provider (optional - leave empty to use native Claude)
+provider: minimax
+
+# Default model (optional - leave empty to use provider default)
+model: MiniMax-M2.1
+
+# Timeout in milliseconds (default: 3000000 = 50 minutes)
+timeout_ms: 3000000
+
+# Environment variable overrides for specific providers
+env_overrides:
+  # Common overrides for all providers
+  all:
+    DISABLE_NON_ESSENTIAL_MODEL_CALLS: "1"
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+
+  # Provider-specific overrides
+  minimax:
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "MiniMax-M2.1"
+
+  mimo:
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "mimo-v2-flash"
+
+  kimi:
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "kimi-k2-thinking-turbo"
+
+  glm:
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-4.7"
+
+# Example of custom environment variables
+# custom_env:
+#   MY_CUSTOM_VAR: "my_value"
