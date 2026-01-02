@@ -3,9 +3,23 @@ package utils
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"syscall"
 
 	"github.com/argami/cclaude-go/pkg/types"
 )
+
+func ExecuteClaude(args []string) error {
+	cmd := exec.Command("claude", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Propagar señales (Ctrl+C)
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+
+	return cmd.Run()
+}
 
 func SetupEnvironment(provider types.ProviderConfig, authToken string, modelOverride string) error {
 	// Limpiar variables anteriores
