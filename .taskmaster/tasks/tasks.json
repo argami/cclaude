@@ -142,5 +142,163 @@
       "updated": "2026-01-02T05:50:15.048Z",
       "description": "Tasks for cclaude-go context"
     }
+  },
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Initialize Go module and project structure",
+        "description": "Create go.mod, directory structure, and basic files as per architecture",
+        "details": "Run `go mod init github.com/argami/cclaude` with go 1.21. Create directories: cmd/cclaude, internal/config, internal/provider, internal/validator, pkg/models, pkg/cli, config. Add empty files matching the architecture diagram. Ensure zero external dependencies initially.",
+        "testStrategy": "Verify directory structure matches PRD diagram, `go mod tidy` succeeds, no compilation errors on empty main.go",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:35.556Z"
+      },
+      {
+        "id": "2",
+        "title": "Implement provider models",
+        "description": "Create pkg/models/provider.go with exact Provider struct and providers map for mimo, minimax, kimi, glm",
+        "details": "Define Provider struct with Name, BaseURL, Model, EnvKey fields. Implement providers map exactly as specified: mimo (https://api.xiaomimimo.com/anthropic, mimo-v2-flash, MIMO_API_KEY), minimax (https://api.minimax.io/anthropic, MiniMax-M2.1, MINIMAX_API_KEY), add kimi and glm with placeholder values if not specified. Use exported types following Go conventions.",
+        "testStrategy": "Unit test: TestProviderExists() checks all 4 providers return correct config, TestInvalidProvider() returns error",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:35.675Z"
+      },
+      {
+        "id": "3",
+        "title": "Implement CLI flags parsing",
+        "description": "Create pkg/cli/flags.go with Flags struct and ParseFlags() using standard flag package",
+        "details": "Define Flags struct: Provider, Model strings, DryRun/Verbose/Version/Help bools. Use flag.StringVar, flag.BoolVar for --provider, --model, --dry-run, --verbose, --version, --help. Support positional args after flags. Usage: flag.Usage() with clear help text.",
+        "testStrategy": "Integration test: Parse various flag combinations, verify struct fields match inputs, test positional args capture",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:36.191Z"
+      },
+      {
+        "id": "4",
+        "title": "Implement API key validator",
+        "description": "Create internal/validator/validator.go with ValidateAPIKey(provider) function",
+        "details": "Lookup provider in models map, check if os.Getenv(provider.EnvKey) is non-empty. Return descriptive error like `Missing API key for %s: set %s` if missing. Use fmt.Errorf for errors.",
+        "testStrategy": "Unit tests: TestValidateAPIKeyValid() with mocked env succeeds, TestMissingKey() returns expected error, TestInvalidProvider() returns provider not found error",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:36.812Z"
+      },
+      {
+        "id": "5",
+        "title": "Implement configuration loader",
+        "description": "Create internal/config/config.go with Config struct and LoadConfig(path) merging YAML + env vars",
+        "details": "Define Config struct matching spec: Provider, Model, Timeout_ms int, EnvOverrides map[string]string with yaml tags. Use gopkg.in/yaml.v3 for YAML parsing (add to go.mod). Load file if exists, override with env vars (e.g. CCLUADE_PROVIDER), prioritize CLI flags last. Return defaults if no config.",
+        "testStrategy": "Unit tests: TestLoadEmptyConfig() returns defaults, TestYAMLConfig() parses file correctly, TestEnvOverride() env vars take precedence, TestFlagOverride() CLI flags final",
+        "priority": "medium",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:37.416Z"
+      },
+      {
+        "id": "6",
+        "title": "Implement provider execution logic",
+        "description": "Create internal/provider/provider.go with Execute(provider, args) setting env vars and exec.Command('claude')",
+        "details": "Lookup provider config, set ANTHROPIC_BASE_URL=provider.BaseURL, ANTHROPIC_AUTH_TOKEN=os.Getenv(provider.EnvKey), merge Config.EnvOverrides. Use exec.Command(\"claude\", args...), pipe Stdin/Stdout/Stderr to os, return cmd.Run() error. Handle model via env if needed.",
+        "testStrategy": "Integration test: Mock exec.Command, verify env vars set correctly, test stdin/stdout piping, test error propagation",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "4"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:38.097Z"
+      },
+      {
+        "id": "7",
+        "title": "Create main entry point",
+        "description": "Implement cmd/cclaude/main.go orchestrating flags, config, validation, and execution",
+        "details": "Parse flags, handle --help/--version (print version from LDFLAGS), load config with overrides, validate API key if provider specified, handle --dry-run (print config without exec), else Execute(). Use proper error handling and os.Exit(1) on errors. Add version const.",
+        "testStrategy": "End-to-end test: Run main with various flag combos, verify correct execution path, mock claude binary for integration",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "5",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:38.719Z"
+      },
+      {
+        "id": "8",
+        "title": "Implement Makefile for build and distribution",
+        "description": "Create Makefile with build, test, install, clean, release targets matching spec",
+        "details": "Implement exact Makefile content: VERSION from git describe, LDFLAGS for version, build to ./cclaude, install to /usr/local/bin, test ./..., cross-compile linux/darwin amd64/arm64 for release, install-script echo instructions.",
+        "testStrategy": "Manual verification: Run `make build`, `make test`, `make install`, verify binary works, check cross-compiled binaries execute",
+        "priority": "medium",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:39.331Z"
+      },
+      {
+        "id": "9",
+        "title": "Add unit and integration tests",
+        "description": "Create comprehensive go tests for all packages: provider, config, validator, cli, provider",
+        "details": "Use testing package, table-driven tests. Test edge cases: missing keys, invalid providers, flag parsing, config merging, exec errors. Aim for 80%+ coverage. Add TestMain integration test simulating full execution.",
+        "testStrategy": "Run `go test ./... -v -cover`, verify 100% pass rate, coverage report shows good coverage, integration test mocks claude successfully",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:39.947Z"
+      },
+      {
+        "id": "10",
+        "title": "Add documentation and config example",
+        "description": "Create README.md and config/cclaude.yaml example file",
+        "details": "README: Installation (make install), usage examples (`cclaude mimo`, env vars), providers list, troubleshooting API keys, build instructions. config/cclaude.yaml example with all fields populated for mimo provider.",
+        "testStrategy": "Verify README renders correctly, config.yaml parses without error via LoadConfig test, usage examples match actual flags",
+        "priority": "medium",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-01-02T06:18:40.658Z"
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-01-02T06:18:40.658Z",
+      "taskCount": 10,
+      "completedCount": 10,
+      "tags": [
+        "master"
+      ]
+    }
   }
 }
