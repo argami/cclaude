@@ -4,68 +4,59 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"github.com/argami/cclaude-glm/internal/config"
+	"github.com/argami/cclaude-glm/internal/provider"
 )
 
 type Executor struct {
-	provider string
+	provider provider.Provider
 }
 
-func NewExecutor(provider string) *Executor {
-	return &Executor{provider: provider}
+func NewExecutor(p provider.Provider) *Executor {
+	return &Executor{provider: p}
 }
 
-// RunProvider is a convenience function to create an executor and run it
-func RunProvider(provider string, args []string) error {
-	executor := NewExecutor(provider)
+// RunProvider is a convenience function that creates a provider and executes
+func RunProvider(providerName string, args []string) error {
+	// Create provider using factory
+	p, err := provider.Factory(providerName)
+	if err != nil {
+		return err
+	}
+
+	executor := NewExecutor(p)
 	return executor.Execute(args)
 }
 
 func (e *Executor) Execute(args []string) error {
-	// Load config to get provider details
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("error cargando configuración: %w", err)
-	}
-
-	provider, exists := cfg.Providers[e.provider]
-	if !exists {
-		return fmt.Errorf("proveedor no encontrado: %s", e.provider)
-	}
-
-	// Validate API key if needed
-	if provider.EnvKey != "" {
-		if os.Getenv(provider.EnvKey) == "" {
-			return fmt.Errorf("API key no definida: %s\nexport %s='your-api-key'", provider.EnvKey, provider.EnvKey)
-		}
+	// Validate provider configuration
+	if err := e.provider.Validate(); err != nil {
+		return err
 	}
 
 	// Setup environment variables
-	if provider.BaseURL != "" {
-		os.Setenv("ANTHROPIC_BASE_URL", provider.BaseURL)
+	if err := e.provider.SetupEnv(); err != nil {
+		return err
 	}
-	if provider.Model != "" {
-		os.Setenv("MAIN_MODEL", provider.Model)
-		os.Setenv("ANTHROPICIC_MODEL", provider.Model)
-		os.Setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", provider.Model)
-		os.Setenv("ANTHROPIC_DEFAULT_HAIKU_MODEL", provider.Model)
-		os.Setenv("CLAUDE_CODE_SUBAGENT_MODEL", provider.Model)
-	}
-	if provider.OpusModel != "" {
-		os.Setenv("CLAUDE_DEFAULT_SONNET_MODEL", provider.OpusModel)
-		os.Setenv("CLAUDE_DEFAULT_OPUS_MODEL", provider.OpusModel)
-	}
-	os.Setenv("ANTHROPIC_API_KEY", "")
-	os.Setenv("DISABLE_NON_ESSENTIAL_MODEL_CALLS", "1")
-	os.Setenv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
-	os.Setenv("API_TIMEOUT_MS", "3000000")
 
-	// Prepare claude args
-	claudeArgs := []string{"claude"}
+	// Get claude command and args
+	cmdName, cmdArgs := e.provider.GetClaudeArgs()
+
+	// Prepare claude args - prepend user args
+	claudeArgs := append([]string{cmdName}, cmdArgs...)
 	claudeArgs = append(claudeArgs, args...)
 
+	// Check if claude binary exists
+	cmdPath, err := exec.LookPath(claudeArgs[0])
+	if err != nil {
+		return fmt.Errorf("claude CLI no encontrado en PATH: %w", err)
+	}
+
+	if cmdPath == "" {
+		return fmt.Errorf("claude CLI no encontrado en PATH")
+	}
+
 	// Execute claude
-	cmd := exec.Command(claudeArgs[0], claudeArgs[1:]...)
+	cmd := exec.Command(cmdPath, claudeArgs[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

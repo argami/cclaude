@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"github.com/argami/cclaude-glm/internal/execution"
 )
 
 func NewRootCommand() *cobra.Command {
@@ -49,13 +50,11 @@ EJEMPLOS:
 				return fmt.Errorf("proveedor no válido: %s\nproveedores disponibles: mimo, minimax, kimi, glm, claude", provider)
 			}
 
-			// Execute with provider (will implement execution logic here)
-			fmt.Printf("Ejecutando con proveedor: %s, args: %v\n", provider, remainingArgs)
-			return nil
+			// Execute with provider using execution package
+			return execution.RunProvider(provider, remainingArgs)
 		},
 	}
 
-	rootCmd.AddCommand(NewProviderCommand())
 	rootCmd.AddCommand(NewListCommand())
 	rootCmd.AddCommand(NewVersionCommand())
 
