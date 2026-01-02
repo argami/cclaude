@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -26,6 +27,97 @@ func main() {
 	if flagConfig.Version {
 		utils.ShowVersion()
 		os.Exit(0)
+	}
+
+	// Modo interactivo
+	if flagConfig.Interactive {
+		im := utils.NewInteractiveMode()
+		if err := im.Run(); err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		return
+	}
+
+	// Health check
+	if flagConfig.HealthCheck {
+		healthChecker := provider.NewHealthChecker()
+		results := healthChecker.CheckAll()
+		fmt.Println(healthChecker.FormatHealthResults(results, flagConfig.Debug))
+		os.Exit(0)
+	}
+
+	// Diagnóstico completo
+	if flagConfig.Diagnose {
+		healthChecker := provider.NewHealthChecker()
+		diagnostics := healthChecker.RunDiagnostics()
+		fmt.Println("\n📊 Diagnóstico Completo:")
+		for k, v := range diagnostics {
+			fmt.Printf("  %s: %v\n", k, v)
+		}
+		os.Exit(0)
+	}
+
+	// Mostrar configuración actual
+	if flagConfig.ShowConfig {
+		utils.ShowConfig()
+		utils.ShowTips()
+		os.Exit(0)
+	}
+
+	// Listar perfiles
+	if flagConfig.ListProfiles {
+		pm, err := config.NewProfileManager()
+		if err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		if err := pm.LoadProfiles(); err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		profiles := pm.ListProfiles()
+		if len(profiles) == 0 {
+			fmt.Println("No hay perfiles configurados.")
+		} else {
+			fmt.Println("📋 Perfiles disponibles:")
+			for _, p := range profiles {
+				fmt.Printf("  - %s\n", p)
+			}
+		}
+		os.Exit(0)
+	}
+
+	// Crear perfiles por defecto
+	if flagConfig.CreateProfiles {
+		pm, err := config.NewProfileManager()
+		if err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		if err := pm.CreateDefaultProfiles(); err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		fmt.Println("✅ Perfiles por defecto creados:")
+		for _, p := range pm.ListProfiles() {
+			fmt.Printf("  - %s\n", p)
+		}
+		os.Exit(0)
+	}
+
+	// Aplicar perfil si se especificó
+	if flagConfig.Profile != "" {
+		pm, err := config.NewProfileManager()
+		if err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		if err := pm.LoadProfiles(); err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		profile, exists := pm.GetProfile(flagConfig.Profile)
+		if !exists {
+			utils.HandleError(fmt.Errorf("perfil '%s' no encontrado", flagConfig.Profile), utils.ExitConfigError)
+		}
+		if err := pm.ApplyProfile(profile); err != nil {
+			utils.HandleError(err, utils.ExitConfigError)
+		}
+		utils.Info("Perfil '%s' aplicado", flagConfig.Profile)
 	}
 
 	// Validar ambiente
@@ -77,6 +169,17 @@ func main() {
 		utils.SetLogLevel(utils.LevelDebug)
 		utils.Debug("Modo debug habilitado")
 		utils.Debug("Base URL: %s", providerConfig.BaseURL)
+	}
+
+	// Confirmación interactiva si está habilitada
+	if flagConfig.Confirm && len(flagConfig.Args) > 0 {
+		fmt.Printf("¿Ejecutar con %s? [s/n]: ", providerConfig.Name)
+		var response string
+		fmt.Scanln(&response)
+		if response != "s" && response != "S" && response != "y" && response != "Y" {
+			fmt.Println("❌ Operación cancelada")
+			os.Exit(0)
+		}
 	}
 
 	// Ejecutar claude con argumentos restantes

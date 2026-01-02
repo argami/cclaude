@@ -33,7 +33,7 @@ func TestShowHelp(t *testing.T) {
 		"kimi",
 		"glm",
 		"claude",
-		"Flags:",
+		"Flags",
 		"--provider",
 		"--help",
 		"--version",
