@@ -57,6 +57,9 @@ EJEMPLOS:
 
 	rootCmd.AddCommand(NewListCommand())
 	rootCmd.AddCommand(NewVersionCommand())
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(NewConfigPathCommand())
+	rootCmd.AddCommand(NewValidateCommand())
 
 	return rootCmd
 }
